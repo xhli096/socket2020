@@ -1,4 +1,4 @@
-package com.xinghaol.socket;
+package com.xinghaol.chat;
 
 import com.google.common.base.Strings;
 

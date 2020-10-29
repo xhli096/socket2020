@@ -1,4 +1,4 @@
-package com.xinghaol.socket;
+package com.xinghaol.chat;
 
 import java.io.*;
 import java.net.Socket;
