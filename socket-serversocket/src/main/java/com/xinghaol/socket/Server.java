@@ -16,6 +16,7 @@ public class Server {
     public static void main(String[] args) {
         final int DEFAULT_PORT = 8888;
         ServerSocket serverSocket = null;
+        final String EXIT = "exit";
 
         // 绑定监听端口
         try {
@@ -30,14 +31,20 @@ public class Server {
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
-                // 读取客户端发送的消息
-                String msg = bufferedReader.readLine().trim();
-                if (!Strings.isNullOrEmpty(msg)) {
+                String msg;
+                while (!Strings.isNullOrEmpty((msg = bufferedReader.readLine()))) {
+                    System.out.println(msg);
+                    // 读取客户端发送的消息
                     System.out.println("客户端[" + socket.getInetAddress().getHostAddress() + "." + socket.getPort() + "]：" + msg);
 
                     // 回复客户发送的消息
                     bufferedWriter.write("服务器端返回消息：[" + msg + "]\n");
                     bufferedWriter.flush();
+
+                    if (EXIT.equals(msg)) {
+                        System.out.println("客户端[" + socket.getInetAddress().getHostAddress() + "." + socket.getPort() + "]已断开连接");
+                        break;
+                    }
                 }
             }
 
