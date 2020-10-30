@@ -1,7 +1,5 @@
 package com.xinghaol.chat;
 
-import com.google.common.base.Strings;
-
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -45,7 +43,7 @@ public class BioChatServer {
                 // 等待客户端连接
                 Socket socket = serverSocket.accept();
                 // 创建chat handler线程
-
+                new Thread(new ChatHandler(this, socket)).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -55,12 +53,12 @@ public class BioChatServer {
     }
 
     /**
-     * 添加一个client
+     * 添加一个client; 线程安全性，先简单添加synchronized保证
      *
      * @param socket
      * @throws IOException
      */
-    private void addClient(Socket socket) throws IOException {
+    public synchronized void addClient(Socket socket) throws IOException {
         if (socket == null) {
             return;
         }
@@ -79,7 +77,7 @@ public class BioChatServer {
      * @param socket
      * @throws IOException
      */
-    private void removeClient(Socket socket) throws IOException {
+    public synchronized void removeClient(Socket socket) throws IOException {
         if (socket == null) {
             return;
         }
@@ -100,8 +98,8 @@ public class BioChatServer {
      * @param message
      * @throws IOException
      */
-    private void forwardMessage(Socket socket, String message) throws IOException {
-        if (socket == null || Strings.isNullOrEmpty(message)) {
+    public synchronized void forwardMessage(Socket socket, String message) throws IOException {
+        if (socket == null || message == null || "".equals(message)) {
             return;
         }
         Integer port = socket.getPort();
@@ -114,10 +112,14 @@ public class BioChatServer {
         }
     }
 
+    public boolean readyToExit(String message) {
+        return EXIT.equals(message);
+    }
+
     /**
      * 关闭serversocket
      */
-    private void close() {
+    private synchronized void close() {
         if (null != serverSocket) {
             try {
                 serverSocket.close();
@@ -126,5 +128,10 @@ public class BioChatServer {
                 e.printStackTrace();
             }
         }
+    }
+
+    public static void main(String[] args) {
+        BioChatServer bioChatServer = new BioChatServer();
+        bioChatServer.start();
     }
 }
