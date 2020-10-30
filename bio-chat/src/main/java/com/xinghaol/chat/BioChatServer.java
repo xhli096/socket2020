@@ -8,6 +8,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * @author xinghaol
@@ -25,8 +27,11 @@ public class BioChatServer {
     private Map<Integer, Writer> connectedClients;
     private ServerSocket serverSocket;
 
+    private ExecutorService executorService;
+
     public BioChatServer() {
         connectedClients = new HashMap<>();
+        executorService = Executors.newFixedThreadPool(10);
     }
 
     public BioChatServer(Map<Integer, Writer> connectedClients) {
@@ -43,7 +48,8 @@ public class BioChatServer {
                 // 等待客户端连接
                 Socket socket = serverSocket.accept();
                 // 创建chat handler线程
-                new Thread(new ChatHandler(this, socket)).start();
+                // new Thread(new ChatHandler(this, socket)).start();
+                executorService.execute(new ChatHandler(this, socket));
             }
         } catch (IOException e) {
             e.printStackTrace();
