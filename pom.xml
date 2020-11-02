@@ -12,6 +12,7 @@
         <module>socket-serversocket</module>
         <module>bio-chat</module>
         <module>local-file</module>
+        <module>nio-chat</module>
     </modules>
 
     <!--统一管理jar包版本-->
