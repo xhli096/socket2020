@@ -17,144 +17,121 @@ import java.util.Set;
  */
 public class NioChatServer {
     private static final int DEFAULT_PORT = 8888;
-    private static final String EXIT = "exit";
+    private static final String QUIT = "exit";
     private static final int BUFFER = 1024;
 
-    private ServerSocketChannel serverSocketChannel;
+    private ServerSocketChannel server;
     private Selector selector;
-    private ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER);
-    private ByteBuffer writeBuffer = ByteBuffer.allocate(BUFFER);
-
-    /**
-     * 默认的编码方式
-     */
+    private ByteBuffer rBuffer = ByteBuffer.allocate(BUFFER);
+    private ByteBuffer wBuffer = ByteBuffer.allocate(BUFFER);
     private Charset charset = StandardCharsets.UTF_8;
-    /**
-     * 允许用户自定义一个端口
-     */
     private int port;
-
-    public NioChatServer(int port) {
-        this.port = port;
-    }
 
     public NioChatServer() {
         this(DEFAULT_PORT);
     }
 
+    public NioChatServer(int port) {
+        this.port = port;
+    }
+
     private void start() {
         try {
-            // ServerSocketChannel.open()创建的serverSocketChannel，处于一个阻塞方式的调用
-            serverSocketChannel = ServerSocketChannel.open();
-            // 设置为false，即设置为非阻塞的方式。NIO的方式要求为非阻塞方式
-            serverSocketChannel.configureBlocking(false);
-            // 监听server socket的特定端口
-            serverSocketChannel.socket().bind(new InetSocketAddress(port));
+            server = ServerSocketChannel.open();
+            server.configureBlocking(false);
+            server.socket().bind(new InetSocketAddress(port));
 
-            // nio中selector的处理
             selector = Selector.open();
-            // 将服务器端监听客户端连接的channel，注册到selector上，监听accept事件，类似于bio中的accept函数
-            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
-            System.out.println("启动服务器，监听端口：" + port);
+            server.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("启动服务器， 监听端口：" + port + "...");
 
-            // 如果没有监听到事件的发生，那么select函数会一直阻塞在这里。需要不断的监听，所以放到while循环中
             while (true) {
                 selector.select();
                 Set<SelectionKey> selectionKeys = selector.selectedKeys();
-                // 处理这些触发事件
-                selectionKeys.forEach(selectionKey -> {
-                    try {
-                        handles(selectionKey);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
-
-                // 必须自己手动的清除，不会自动清空。下一次的时间会累加到上一次时间的set中
+                for (SelectionKey key : selectionKeys) {
+                    // 处理被触发的事件
+                    handles(key);
+                }
                 selectionKeys.clear();
             }
+
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
-            close(serverSocketChannel);
             close(selector);
         }
+
     }
 
-    private void handles(SelectionKey selectionKey) throws IOException {
-        // ACCEPT事件-和客户端建立了连接
-        if (selectionKey.isAcceptable()) {
-            ServerSocketChannel server = (ServerSocketChannel) selectionKey.channel();
+    private void handles(SelectionKey key) throws IOException {
+        // ACCEPT事件 - 和客户端建立了连接
+        if (key.isAcceptable()) {
+            ServerSocketChannel server = (ServerSocketChannel) key.channel();
             SocketChannel client = server.accept();
             client.configureBlocking(false);
             client.register(selector, SelectionKey.OP_READ);
-            System.out.println("客户端[" + client.socket().getPort() + "]已连接");
+            System.out.println(getClientName(client) + "已连接");
         }
-        // READ事件-在客户端的channel中有了可读的消息，即客户端发送了消息
-        if (selectionKey.isReadable()) {
-            SocketChannel client = (SocketChannel) selectionKey.channel();
-            String forwardMessage = receive(client);
-
-            // 如果接受的消息为空，则当前的连接可能出现了一些异常。不在监听这个连接的请求。
-            if (forwardMessage.isEmpty()) {
-                // 取消，selector不在监听这个channel的
-                selectionKey.cancel();
-                // 通知selector
+        // READ事件 - 客户端发送了消息
+        else if (key.isReadable()) {
+            SocketChannel client = (SocketChannel) key.channel();
+            String fwdMsg = receive(client);
+            if (fwdMsg.isEmpty()) {
+                // 客户端异常
+                key.cancel();
                 selector.wakeup();
             } else {
-                // 转发数据
-                forwardMessage(selector, forwardMessage, client);
+                System.out.println(getClientName(client) + ":" + fwdMsg);
+                forwardMessage(client, fwdMsg);
 
-                if (readyToExit(forwardMessage)) {
-                    selectionKey.cancel();
+                // 检查用户是否退出
+                if (readyToQuit(fwdMsg)) {
+                    key.cancel();
                     selector.wakeup();
-                    System.out.println("客户端[" + client.socket().getPort() + "]已断开连接");
+                    System.out.println(getClientName(client) + "已断开");
                 }
             }
+
         }
     }
 
-    private void forwardMessage(Selector selector, String message, SocketChannel client) {
-        // selector.keys()会返回所有注册到selector上的集合。认为是当前所有在聊天室中的用户
-        Set<SelectionKey> keys = selector.keys();
-        keys.forEach(key -> {
+    private void forwardMessage(SocketChannel client, String fwdMsg) throws IOException {
+        for (SelectionKey key : selector.keys()) {
             Channel connectedClient = key.channel();
-            if (!(connectedClient instanceof ServerSocketChannel) && key.isValid() && !client.equals(connectedClient)) {
-                writeBuffer.clear();
-                writeBuffer.put(charset.encode("客户端[" + client.socket().getPort() + "]:" + message));
-                writeBuffer.flip();
+            if (connectedClient instanceof ServerSocketChannel) {
+                continue;
+            }
 
-                // 从writeBuffer中读数据，并写入到channel中去，所以上面需要flip从写状态转成读状态
-                while (writeBuffer.hasRemaining()) {
-                    try {
-                        ((SocketChannel) connectedClient).write(writeBuffer);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+            if (key.isValid() && !client.equals(connectedClient)) {
+                wBuffer.clear();
+                wBuffer.put(charset.encode(getClientName(client) + ":" + fwdMsg));
+                wBuffer.flip();
+                while (wBuffer.hasRemaining()) {
+                    ((SocketChannel) connectedClient).write(wBuffer);
                 }
             }
-        });
-    }
-
-    private String receive(SocketChannel channel) throws IOException {
-        readBuffer.clear();
-        // TODO ?
-        while (channel.read(readBuffer) > 0) {
         }
-        // 由写模式 -》 读模式
-        readBuffer.flip();
-
-        return String.valueOf(charset.decode(readBuffer));
     }
 
-    public boolean readyToExit(String message) {
-        return EXIT.equals(message);
+    private String receive(SocketChannel client) throws IOException {
+        rBuffer.clear();
+        while (client.read(rBuffer) > 0) ;
+        rBuffer.flip();
+        return String.valueOf(charset.decode(rBuffer));
     }
 
-    private void close(Closeable closeable) {
-        if (null != closeable) {
+    private String getClientName(SocketChannel client) {
+        return "客户端[" + client.socket().getPort() + "]";
+    }
+
+    private boolean readyToQuit(String msg) {
+        return QUIT.equals(msg);
+    }
+
+    private void close(Closeable closable) {
+        if (closable != null) {
             try {
-                closeable.close();
+                closable.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -162,7 +139,7 @@ public class NioChatServer {
     }
 
     public static void main(String[] args) {
-        NioChatServer nioChatServer = new NioChatServer(7777);
-        nioChatServer.start();
+        NioChatServer chatServer = new NioChatServer(7777);
+        chatServer.start();
     }
 }

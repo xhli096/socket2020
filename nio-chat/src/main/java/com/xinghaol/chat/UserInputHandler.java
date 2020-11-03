@@ -11,9 +11,9 @@ import java.io.InputStreamReader;
  * @description 用户输入信息handler
  */
 public class UserInputHandler implements Runnable {
-    private BioChatClient chatClient;
+    private NioChatClient chatClient;
 
-    public UserInputHandler(BioChatClient chatClient) {
+    public UserInputHandler(NioChatClient chatClient) {
         this.chatClient = chatClient;
     }
 
@@ -29,7 +29,7 @@ public class UserInputHandler implements Runnable {
                 chatClient.send(message);
 
                 // 检查用户是否退出
-                if (chatClient.readyToExit(message)) {
+                if (chatClient.readyToQuit(message)) {
                     break;
                 }
             }
