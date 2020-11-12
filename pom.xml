@@ -13,6 +13,7 @@
         <module>bio-chat</module>
         <module>local-file</module>
         <module>nio-chat</module>
+        <module>aio-chat</module>
     </modules>
 
     <!--统一管理jar包版本-->

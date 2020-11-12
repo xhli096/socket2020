@@ -9,7 +9,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 /**
@@ -75,7 +74,7 @@ public class NioChatClient {
         } catch (IOException e) {
             e.printStackTrace();
         } catch (ClosedSelectorException e) {
-            // 用户正常退出
+            // 用户正常退出，不需要做一些特殊的处理
         } finally {
             close(selector);
         }
@@ -126,7 +125,7 @@ public class NioChatClient {
 
     private String receive(SocketChannel client) throws IOException {
         rBuffer.clear();
-        while (client.read(rBuffer) > 0);
+        while (client.read(rBuffer) > 0) ;
         rBuffer.flip();
         return String.valueOf(charset.decode(rBuffer));
     }
